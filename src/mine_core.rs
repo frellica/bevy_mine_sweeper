@@ -15,7 +15,7 @@ pub enum BlockStatus {
     QuestionMarked,
     Flaged,
 }
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Position {
     pub x: usize,
     pub y: usize,

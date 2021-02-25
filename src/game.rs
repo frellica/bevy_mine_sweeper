@@ -3,7 +3,7 @@ use bevy::{
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
-use crate::mine_core::{ BlockType, BlockStatus, MinePlayground, MineBlock };
+use crate::mine_core::{ BlockType, BlockStatus, MinePlayground, MineBlock, Position };
 
 pub fn game_app(config: GameConfig) {
     App::build()
@@ -17,16 +17,27 @@ pub fn game_app(config: GameConfig) {
         })
         .add_resource(config)
         .add_plugins(DefaultPlugins)
-        .init_resource::<ButtonMaterials>()
-        .add_plugin(FrameTimeDiagnosticsPlugin)
-        .add_resource(State::new(GameState::Ready))
-        .add_startup_system(setup.system())
-        .add_system(fps_update.system())
-        .add_system(restart_button_system.system())
-        .add_startup_system(new_map.system())
-        .add_stage_after(stage::UPDATE, STAGE, StateStage::<GameState>::default())
-        .on_state_enter(STAGE, GameState::Ready, new_game.system())
+        .add_plugin(GamePlugin)
         .run();
+}
+
+struct GamePlugin;
+
+impl Plugin for GamePlugin {
+    fn build(&self, app: &mut AppBuilder) {
+        app.init_resource::<ButtonMaterials>()
+            .add_resource(CursorLocation(Vec2::new(0.0, 0.0)))
+            .add_plugin(FrameTimeDiagnosticsPlugin)
+            .add_resource(State::new(GameState::Ready))
+            .add_startup_system(setup.system())
+            .add_system(fps_update.system())
+            .add_system(restart_button_system.system())
+            .add_startup_system(new_map.system())
+            .add_system(handle_movement.system())
+            .add_system(handle_click.system())
+            .add_stage_after(stage::UPDATE, STAGE, StateStage::<GameState>::default())
+            .on_state_enter(STAGE, GameState::Ready, new_game.system());
+    }
 }
 
 const BLOCK_WIDTH: usize = 24;
@@ -54,7 +65,9 @@ enum GameState {
     Over,
 }
 
-// TODO: use texture?
+#[derive(Default, Debug)]
+struct CursorLocation(Vec2);
+
 struct ButtonMaterials {
     normal: Handle<ColorMaterial>,
     hovered: Handle<ColorMaterial>,
@@ -183,7 +196,9 @@ fn setup(
             });
         });
 }
-struct RenderBlock;
+struct RenderBlock {
+    pos: Position,
+}
 fn new_map(
     commands: &mut Commands,
     config: Res<GameConfig>,
@@ -209,8 +224,7 @@ fn new_game(
             // println!("atlas:{:?}", texture_atlas);
             
             commands
-                .spawn((RenderBlock, ))
-                .with_bundle(SpriteSheetBundle {
+                .spawn(SpriteSheetBundle {
                     transform: Transform {
                         translation: Vec3::new(
                             (block.pos.x * BLOCK_WIDTH) as f32 - window_offset.x,
@@ -223,8 +237,34 @@ fn new_game(
                     texture_atlas,
                     sprite: TextureAtlasSprite::new(block.get_sprite_index() as u32),
                     ..Default::default()
-                });
+                })
+                .with(RenderBlock { pos: block.pos });
         }
+    }
+}
+fn handle_movement(
+    mut cursor_pos: ResMut<CursorLocation>,
+    // mut state: ResMut<State>,
+    cursor_moved_events: Res<Events<CursorMoved>>,
+    mut evr_cursor: Local<EventReader<CursorMoved>>,
+
+) {
+    for ev in evr_cursor.iter(&cursor_moved_events) {
+        // println!("Cursor at: {:?}", ev.position);
+        cursor_pos.0 = ev.position;
+    }
+}
+
+fn handle_click(
+    mut block_query: Query<&mut SpriteSheetBundle, With<RenderBlock>>,
+    ev_cursor: Res<Events<CursorMoved>>,
+    mut evr_cursor: Local<EventReader<CursorMoved>>,
+    btns: Res<Input<MouseButton>>,
+    cursor_pos: Res<CursorLocation>,
+
+) {
+    if btns.just_released(MouseButton::Left) {
+        println!("left btn clicked{:?}", cursor_pos);
     }
 }
 
