@@ -3,28 +3,33 @@ static SIZE_RANGE: std::ops::Range<usize> = 5..200;
 static MINE_COUNT_RANGE: std::ops::Range<usize> = 1..100;
 
 #[derive(Debug)]
-enum BlockType {
+pub enum BlockType {
     Mine,
     Space,
     Tip(usize),
 }
 #[derive(Debug)]
-enum BlockStatus {
+pub enum BlockStatus {
     Shown,
     Hidden,
     QuestionMarked,
     Flaged,
 }
-
 #[derive(Debug)]
-struct MineBlock {
-    btype: BlockType,
-    bstatus: BlockStatus,
+pub struct Position {
+    pub x: usize,
+    pub y: usize,
 }
-struct MinePlayground {
+#[derive(Debug)]
+pub struct MineBlock {
+    pub btype: BlockType,
+    pub bstatus: BlockStatus,
+    pub pos: Position,
+}
+pub struct MinePlayground {
     width: usize,
     height: usize,
-    map: Vec<Vec<MineBlock>>,
+    pub map: Vec<Vec<MineBlock>>,
 }
 
 impl Default for MineBlock {
@@ -32,6 +37,7 @@ impl Default for MineBlock {
         MineBlock {
             bstatus: BlockStatus::Hidden,
             btype: BlockType::Space,
+            pos: Position { x: 0, y: 0},
         }
     }
 }
@@ -71,9 +77,10 @@ impl MinePlayground {
         mine_seeds.shuffle(&mut rng);
         let mut mine_map: Vec<Vec<MineBlock>> = vec![];
         for i in 0..height {
-            mine_map.push(mine_seeds[i * width..i * width + width].iter().map(|&is_mine_block| {
+            mine_map.push(mine_seeds[i * width..i * width + width].iter().enumerate().map(|(j, &is_mine_block)| {
                 MineBlock {
                     btype: if is_mine_block { BlockType::Mine } else { BlockType::Space },
+                    pos: Position { x: j, y: i },
                     ..Default::default()
                 }
             }).collect());
@@ -91,7 +98,7 @@ impl MinePlayground {
                 }
             }
         }
-        println!("{:?}", mine_map);
+        // println!("{:?}", mine_map);
 
         Ok(MinePlayground {
             width,
