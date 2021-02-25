@@ -5,6 +5,30 @@ use bevy::{
 };
 use crate::mine_core::{ BlockType, BlockStatus, MinePlayground, MineBlock };
 
+pub fn game_app(config: GameConfig) {
+    App::build()
+        .add_resource(WindowDescriptor {
+            vsync: false,
+            width: cmp::max(config.width * BLOCK_WIDTH, MIN_WIDTH) as f32,
+            height: cmp::max(config.height * BLOCK_WIDTH + Y_MARGIN, MIN_HEIGHT) as f32,
+            title: String::from("Mine Sweeper"),
+            resizable: false,
+            ..Default::default()
+        })
+        .add_resource(config)
+        .add_plugins(DefaultPlugins)
+        .init_resource::<ButtonMaterials>()
+        .add_plugin(FrameTimeDiagnosticsPlugin)
+        .add_resource(State::new(GameState::Ready))
+        .add_startup_system(setup.system())
+        .add_system(fps_update.system())
+        .add_system(restart_button_system.system())
+        .add_startup_system(new_map.system())
+        .add_stage_after(stage::UPDATE, STAGE, StateStage::<GameState>::default())
+        .on_state_enter(STAGE, GameState::Ready, new_game.system())
+        .run();
+}
+
 const BLOCK_WIDTH: usize = 24;
 const MIN_HEIGHT: usize = 160;
 const MIN_WIDTH: usize = 160;
@@ -46,29 +70,19 @@ impl FromResources for ButtonMaterials {
         }
     }
 }
-
-pub fn game_app(config: GameConfig) {
-    App::build()
-        .add_resource(WindowDescriptor {
-            vsync: false,
-            width: cmp::max(config.width * BLOCK_WIDTH, MIN_WIDTH) as f32,
-            height: cmp::max(config.height * BLOCK_WIDTH + Y_MARGIN, MIN_HEIGHT) as f32,
-            title: String::from("Mine Sweeper"),
-            resizable: false,
-            ..Default::default()
-        })
-        .add_resource(config)
-        .add_plugins(DefaultPlugins)
-        .init_resource::<ButtonMaterials>()
-        .add_plugin(FrameTimeDiagnosticsPlugin)
-        .add_resource(State::new(GameState::Ready))
-        .add_startup_system(setup.system())
-        .add_system(fps_update.system())
-        .add_system(restart_button_system.system())
-        .add_startup_system(new_map.system())
-        .add_stage_after(stage::UPDATE, STAGE, StateStage::<GameState>::default())
-        .on_state_enter(STAGE, GameState::Ready, new_game.system())
-        .run();
+impl MineBlock {
+    fn get_sprite_index(&self) -> usize {
+        match self.bstatus {
+            _ => 2,
+            BlockStatus::Flaged => 3,
+            BlockStatus::Shown => {
+                match self.btype {
+                    BlockType::Mine => 1,
+                    _ => 0,
+                }
+            },
+        }
+    }
 }
 
 struct FpsRefresh;
@@ -193,6 +207,7 @@ fn new_game(
         for block in row.iter() {
             let texture_atlas = texture_atlases.get_handle(texture_atlas_handle.clone());
             // println!("atlas:{:?}", texture_atlas);
+            
             commands
                 .spawn((RenderBlock, ))
                 .with_bundle(SpriteSheetBundle {
@@ -206,6 +221,7 @@ fn new_game(
                         ..Default::default()
                     },
                     texture_atlas,
+                    sprite: TextureAtlasSprite::new(block.get_sprite_index() as u32),
                     ..Default::default()
                 });
         }
