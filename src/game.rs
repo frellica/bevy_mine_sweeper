@@ -50,6 +50,7 @@ const Y_MARGIN: usize = 50;
 const SPRITE_SIZE: f32 = 48.0;
 const STAGE: &str = "game_state";
 const NEW_GAME_TEXT: &str = "New Game";
+const HIDDEN_INDEX: usize = 10;
 
 struct RefreshButton;
 struct DebugText;
@@ -98,14 +99,16 @@ impl FromResources for ButtonMaterials {
 impl MineBlock {
     fn get_sprite_index(&self) -> usize {
         match self.bstatus {
-            BlockStatus::Flaged => 3,
+            BlockStatus::Flaged => 12,
+            BlockStatus::QuestionMarked => 11,
             BlockStatus::Shown => {
                 match self.btype {
-                    BlockType::Mine => 1,
-                    _ => 0,
+                    BlockType::Mine => 9,
+                    BlockType::Tip(val) => val,
+                    BlockType::Space => 0,
                 }
             },
-            _ => 2,
+            BlockStatus::Hidden => HIDDEN_INDEX,
         }
     }
 }
@@ -183,7 +186,7 @@ fn setup(
                 // center button
                 position: Rect {
                     left: Val::Px((window.physical_width() as f32) / 2.0 - 50.0),
-                    top: Val::Px(5.0),
+                    top: Val::Px(12.5),
                     ..Default::default()
                 },
                 // horizontally center child text
@@ -211,7 +214,7 @@ fn setup(
         });
 
     let texture_handle = asset_server.load("textures/block.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(SPRITE_SIZE, SPRITE_SIZE), 4, 1);
+    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(SPRITE_SIZE, SPRITE_SIZE), 13, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
     commands.insert_resource(texture_atlas_handle);
 }
@@ -254,8 +257,7 @@ fn init_map_render(
                         ..Default::default()
                     },
                     texture_atlas,
-                    // TODO: rename
-                    sprite: TextureAtlasSprite::new(2),
+                    sprite: TextureAtlasSprite::new(HIDDEN_INDEX as u32),
                     ..Default::default()
                 })
                 .with(RenderBlock { pos: Position { x, y } });
@@ -277,6 +279,7 @@ fn render_map (
         println!("detect mp changed{:?}", mp.shown_count);
         for (mut sprite, rb) in sprites.iter_mut() {
             sprite.index = mp.map[rb.pos.y][rb.pos.x].get_sprite_index() as u32;
+
             // println!("x:{:?}-y:{:?}-block:{:?}-index:{:?}", rb.pos.x, rb.pos.y, mp.map[rb.pos.y][rb.pos.x], mp.map[rb.pos.y][rb.pos.x].get_sprite_index() as u32);
         }
     }

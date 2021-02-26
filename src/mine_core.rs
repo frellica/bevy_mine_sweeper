@@ -64,12 +64,6 @@ impl MineBlock {
 }
 
 impl MinePlayground {
-    fn get(&self, x: isize, y: isize) -> Result<&MineBlock, String> {
-        if x < 0 || y < 0 || x as usize >= self.width || y as usize >= self.height {
-            return Err("out".to_string());
-        }
-        Ok(&self.map[y as usize][x as usize])
-    }
     pub fn init(&width: &usize, &height: &usize, &mine_count: &usize) -> Result<MinePlayground, String> {
         if !SIZE_RANGE.contains(&width) || !SIZE_RANGE.contains(&height) || !MINE_COUNT_RANGE.contains(&mine_count) {
             return Err(String::from("Parameters not in specific range!"));
