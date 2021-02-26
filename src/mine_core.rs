@@ -27,7 +27,7 @@ pub struct MineBlock {
     pub pos: Position,
 }
 pub struct MinePlayground {
-    shown_count: usize,
+    pub shown_count: usize,
     safety_block_count: usize,
     width: usize,
     height: usize,

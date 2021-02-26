@@ -3,7 +3,7 @@ use bevy::{
     diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
-use crate::mine_core::{ BlockType, BlockStatus, MinePlayground, MineBlock, Position };
+use crate::mine_core::{ BlockType, BlockStatus, MinePlayground, MineBlock, Position, ClickResult };
 
 pub fn game_app(config: GameConfig) {
     App::build()
@@ -28,16 +28,18 @@ impl Plugin for GamePlugin {
         app.init_resource::<ButtonMaterials>()
             .add_resource(CursorLocation(Vec2::new(0.0, 0.0)))
             .add_plugin(FrameTimeDiagnosticsPlugin)
-            .add_resource(State::new(GameState::Ready))
+            .add_resource(State::new(GameState::Prepare))
             .add_startup_system(setup.system())
             .add_system(fps_update.system())
+            .add_system(debug_text_update.system())
             .add_system(restart_button_system.system())
             .add_startup_system(new_map.system())
             .add_system(handle_movement.system())
             .add_system(handle_click.system())
-            // .add_system(render_map.system())
+            .add_system(render_map.system())
             .add_stage_after(stage::UPDATE, STAGE, StateStage::<GameState>::default())
-            .on_state_enter(STAGE, GameState::Ready, new_game.system());
+            .on_state_enter(STAGE, GameState::Prepare, init_map_render.system())
+            .on_state_enter(STAGE, GameState::Ready, new_map.system());
     }
 }
 
@@ -47,7 +49,10 @@ const MIN_WIDTH: usize = 160;
 const Y_MARGIN: usize = 50;
 const SPRITE_SIZE: f32 = 48.0;
 const STAGE: &str = "game_state";
+const NEW_GAME_TEXT: &str = "New Game";
 
+struct RefreshButton;
+struct DebugText;
 struct MapData {
     map_entity: Entity,
 }
@@ -63,8 +68,9 @@ pub struct GameConfig {
     pub mine_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum GameState {
+    Prepare,
     Ready,
     Running,
     Over,
@@ -72,6 +78,7 @@ enum GameState {
 
 #[derive(Default, Debug)]
 struct CursorLocation(Vec2);
+struct LastActionText(String);
 
 struct ButtonMaterials {
     normal: Handle<ColorMaterial>,
@@ -91,7 +98,6 @@ impl FromResources for ButtonMaterials {
 impl MineBlock {
     fn get_sprite_index(&self) -> usize {
         match self.bstatus {
-            _ => 2,
             BlockStatus::Flaged => 3,
             BlockStatus::Shown => {
                 match self.btype {
@@ -99,6 +105,7 @@ impl MineBlock {
                     _ => 0,
                 }
             },
+            _ => 2,
         }
     }
 }
@@ -138,7 +145,7 @@ fn setup(
             },
         },
         ..Default::default()
-    });
+    }).with(DebugText);
     commands
         .spawn(TextBundle {
             style: Style {
@@ -168,6 +175,7 @@ fn setup(
         y: window.physical_height() as f32 / 2.0 - BLOCK_WIDTH as f32 / 2.0,
     });
     commands
+        .insert_resource(LastActionText(NEW_GAME_TEXT.to_string()))
         .spawn(ButtonBundle {
             style: Style {
                 size: Size::new(Val::Px(100.0), Val::Px(25.0)),
@@ -190,7 +198,7 @@ fn setup(
         .with_children(|parent| {
             parent.spawn(TextBundle {
                 text: Text {
-                    value: "Restart".to_string(),
+                    value: "New Game".to_string(),
                     font: asset_server.load("fonts/pointfree.ttf"),
                     style: TextStyle {
                         font_size: 20.0,
@@ -199,7 +207,7 @@ fn setup(
                     },
                 },
                 ..Default::default()
-            });
+            }).with(RefreshButton);
         });
 
     let texture_handle = asset_server.load("textures/block.png");
@@ -222,33 +230,54 @@ fn new_map(
     });
 }
 
-fn new_game(
+fn init_map_render(
     commands: &mut Commands,
     texture_atlases: Res<Assets<TextureAtlas>>,
     atlas_handle: Res<Handle<TextureAtlas>>,
-    mp: Res<MinePlayground>,
     window_offset: Res<WindowOffset>,
+    config: Res<GameConfig>,
+    mut game_state: ResMut<State<GameState>>,
 ) {
-    println!("111{:?}", mp.map);
-    for row in mp.map.iter() {
-        for block in row.iter() {
+    println!("111init_map_render run once");
+    for y in 0..config.height {
+        for x in 0..config.width {
             let texture_atlas = texture_atlases.get_handle(atlas_handle.clone());
             commands
                 .spawn(SpriteSheetBundle {
                     transform: Transform {
                         translation: Vec3::new(
-                            (block.pos.x * BLOCK_WIDTH) as f32 - window_offset.x,
-                            (block.pos.y * BLOCK_WIDTH) as f32 - window_offset.y,
+                            (x * BLOCK_WIDTH) as f32 - window_offset.x,
+                            (y * BLOCK_WIDTH) as f32 - window_offset.y,
                             0.0
                         ),
                         scale: Vec3::splat(0.5),
                         ..Default::default()
                     },
                     texture_atlas,
-                    sprite: TextureAtlasSprite::new(block.get_sprite_index() as u32),
+                    // TODO: rename
+                    sprite: TextureAtlasSprite::new(2),
                     ..Default::default()
                 })
-                .with(RenderBlock { pos: block.pos });
+                .with(RenderBlock { pos: Position { x, y } });
+        }
+    }
+    println!("{:?}", game_state.current());
+    game_state.set_next(GameState::Ready).unwrap();
+}
+fn render_map (
+    query: Query<
+        // components
+        &MinePlayground,
+        // filters
+        Changed<MinePlayground>, 
+    >,
+    mut sprites: Query<(&mut TextureAtlasSprite, &RenderBlock)>,
+) {
+    for mp in query.iter() {
+        println!("detect mp changed{:?}", mp.shown_count);
+        for (mut sprite, rb) in sprites.iter_mut() {
+            sprite.index = mp.map[rb.pos.y][rb.pos.x].get_sprite_index() as u32;
+            // println!("x:{:?}-y:{:?}-block:{:?}-index:{:?}", rb.pos.x, rb.pos.y, mp.map[rb.pos.y][rb.pos.x], mp.map[rb.pos.y][rb.pos.x].get_sprite_index() as u32);
         }
     }
 }
@@ -263,30 +292,38 @@ fn handle_movement(
 }
 
 fn handle_click(
-    mut block_query: Query<(&RenderBlock, &mut SpriteSheetBundle)>,
     btns: Res<Input<MouseButton>>,
     cursor_pos: Res<CursorLocation>,
     config: Res<GameConfig>,
-    mut mp: ResMut<MinePlayground>,
-
+    mut mquery: Query<&mut MinePlayground>,
+    map_data: Res<MapData>,
+    mut text_query: Query<&mut Text, With<RefreshButton>>,
+    mut last_action_text: ResMut<LastActionText>,
+    mut game_state: ResMut<State<GameState>>,
 ) {
     if btns.just_released(MouseButton::Left) {
         if let Some((x, y)) = get_block_index_by_cursor_pos(cursor_pos.0, *config) {
             println!("{:?}-{:?}", x, y);
+            let mut mp: Mut<MinePlayground> = mquery.get_component_mut(map_data.map_entity).unwrap();
             let click_result = mp.click(&x, &y);
-            println!("{:?}", mp.map);
-            // let aaa = block_query.get_mut(x);
-            for (block, ssb) in block_query.iter_mut() {
-                println!("{:?}", block.pos);
-                // if block.pos.x == x && block.pos.y == y {
-                //     println!("{:?}", block.pos);
-                // }
+            println!("{:?}", click_result);
+            if let ClickResult::Wasted = click_result {
+                let mut text = text_query.iter_mut().next().unwrap();
+                text.value = String::from("Game Over");
+                *last_action_text = LastActionText(String::from("Game Over"));
+                game_state.set_next(GameState::Over).unwrap();
+            } else if let GameState::Ready = game_state.current()  {
+                game_state.set_next(GameState::Running).unwrap();
             }
         }
     }
     if btns.just_released(MouseButton::Right) {
         if let Some((x, y)) = get_block_index_by_cursor_pos(cursor_pos.0, *config) {
             println!("{:?}-{:?}", x, y);
+            if let GameState::Ready = game_state.current()  {
+                game_state.set_next(GameState::Running).unwrap();
+            }
+            let mut mp: Mut<MinePlayground> = mquery.get_component_mut(map_data.map_entity).unwrap();
             mp.right_click(&x, &y);
         }
     }
@@ -310,6 +347,14 @@ fn fps_update(
         );
     }
 }
+fn debug_text_update(
+    mut query: Query<&mut Text, With<DebugText>>,
+    game_state: Res<State<GameState>>,
+) {
+    for mut text in query.iter_mut() {
+        text.value = format!("state: {:?}", game_state.current());
+    }
+}
 
 fn restart_button_system(
     button_materials: Res<ButtonMaterials>,
@@ -318,18 +363,27 @@ fn restart_button_system(
         (Mutated<Interaction>, With<Button>),
     >,
     mut text_query: Query<&mut Text>,
+    mut last_action_text: ResMut<LastActionText>,
+    mut game_state: ResMut<State<GameState>>,
 ) {
     for (interaction, mut material, children) in interaction_query.iter_mut() {
-        // let mut text = text_query.get_mut(children[0]).unwrap();
+        let mut text = text_query.get_mut(children[0]).unwrap();
         match *interaction {
             Interaction::Clicked => {
                 *material = button_materials.pressed.clone();
+                text.value = NEW_GAME_TEXT.to_string();
+                *last_action_text = LastActionText(NEW_GAME_TEXT.to_string());
+                if *game_state.current() != GameState::Prepare {
+                    game_state.set_next(GameState::Prepare).unwrap();
+                }
             }
             Interaction::Hovered => {
                 *material = button_materials.hovered.clone();
+                text.value = NEW_GAME_TEXT.to_string();
             }
             Interaction::None => {
                 *material = button_materials.normal.clone();
+                text.value = (*last_action_text.0).to_string();
             }
         }
     }
