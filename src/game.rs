@@ -304,18 +304,39 @@ fn handle_click(
     mut last_action_text: ResMut<LastActionText>,
     mut game_state: ResMut<State<GameState>>,
 ) {
+    if let GameState::Over = game_state.current() {
+        return;
+    }
     if btns.just_released(MouseButton::Left) {
         if let Some((x, y)) = get_block_index_by_cursor_pos(cursor_pos.0, *config) {
             println!("{:?}-{:?}", x, y);
             let mut mp: Mut<MinePlayground> = mquery.get_component_mut(map_data.map_entity).unwrap();
+            // some little fix here
+            if let GameState::Ready = game_state.current()  {
+                if let BlockType::Mine = mp.map[y][x].btype {
+                    mp.fix(&x, &y);
+                }
+            }
             let click_result = mp.click(&x, &y);
             println!("{:?}", click_result);
-            if let ClickResult::Wasted = click_result {
-                let mut text = text_query.iter_mut().next().unwrap();
-                text.value = String::from("Game Over");
-                *last_action_text = LastActionText(String::from("Game Over"));
-                game_state.set_next(GameState::Over).unwrap();
-            } else if let GameState::Ready = game_state.current()  {
+            match click_result {
+                ClickResult::Wasted => {
+                    let mut text = text_query.iter_mut().next().unwrap();
+                    text.value = String::from("Game Over");
+                    *last_action_text = LastActionText(String::from("Game Over"));
+                    game_state.set_next(GameState::Over).unwrap();
+                    return;
+                },
+                ClickResult::Win => {
+                    let mut text = text_query.iter_mut().next().unwrap();
+                    text.value = String::from("Finished!");
+                    *last_action_text = LastActionText(String::from("Finished!"));
+                    game_state.set_next(GameState::Over).unwrap();
+                    return;
+                }
+                _ => {}
+            }
+            if let GameState::Ready = game_state.current()  {
                 game_state.set_next(GameState::Running).unwrap();
             }
         }

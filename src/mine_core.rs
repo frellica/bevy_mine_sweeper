@@ -56,10 +56,20 @@ impl BlockType {
             Self::Mine => Self::Mine,
         }
     }
+    fn decrease (&mut self) {
+        *self = match *self {
+            Self::Tip(val @ 2..=8) => Self::Tip(val - 1),
+            Self::Mine => Self::Mine,
+            _ => Self::Space,
+        }
+    }
 }
 impl MineBlock {
     fn add_tip(&mut self) {
         self.btype.increase();
+    }
+    fn remove_tip(&mut self) {
+        self.btype.decrease();
     }
 }
 
@@ -151,6 +161,29 @@ impl MinePlayground {
             BlockStatus::Flaged => { block.bstatus = BlockStatus::QuestionMarked; }
             BlockStatus::QuestionMarked => { block.bstatus = BlockStatus::Hidden; }
             _ => {}
+        }
+    }
+    pub fn fix(&mut self, x: &usize, y: &usize) {
+        println!("fixing!-{:?}-{:?}", x, y);
+        self.map[*y][*x].btype = BlockType::Space;
+        let surroundings = get_surroundings(x, y, &self.width, &self.height);
+        for (cur_x, cur_y) in surroundings.iter() {
+            if let BlockType::Mine = self.map[*cur_y][*cur_x].btype {
+                self.map[*y][*x].add_tip();
+            }
+            self.map[*cur_y][*cur_x].remove_tip();
+        }
+        for new_y in 0..self.height {
+            for new_x in 0..self.width {
+                if self.map[new_y][new_x].btype != BlockType::Mine {
+                    self.map[new_y][new_x].btype = BlockType::Mine;
+                    let surroundings = get_surroundings(&new_x, &new_y, &self.width, &self.height);
+                    for (cur_x, cur_y) in surroundings.iter() {
+                        self.map[*cur_x][*cur_y].add_tip();
+                    }
+                    return;
+                }
+            }
         }
     }
 }
