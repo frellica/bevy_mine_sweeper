@@ -2,13 +2,13 @@ use rand::seq::SliceRandom;
 static SIZE_RANGE: std::ops::Range<usize> = 5..200;
 static MINE_COUNT_RANGE: std::ops::Range<usize> = 1..100;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BlockType {
     Mine,
     Space,
     Tip(usize),
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BlockStatus {
     Shown,
     Hidden,
@@ -27,11 +27,18 @@ pub struct MineBlock {
     pub pos: Position,
 }
 pub struct MinePlayground {
+    shown_count: usize,
+    safety_block_count: usize,
     width: usize,
     height: usize,
     pub map: Vec<Vec<MineBlock>>,
 }
-
+#[derive(Debug)]
+pub enum ClickResult {
+    Wasted,
+    NothingHappened,
+    Win,
+}
 impl Default for MineBlock {
     fn default() -> MineBlock {
         MineBlock {
@@ -101,10 +108,56 @@ impl MinePlayground {
         // println!("{:?}", mine_map);
 
         Ok(MinePlayground {
+            shown_count: 0,
+            safety_block_count: height * width - mine_count,
             width,
             height,
             map: mine_map,
         })
+    }
+    pub fn click(&mut self, x: &usize, y: &usize) -> ClickResult {
+        let mut block = &mut self.map[*y][*x];
+        if let BlockStatus::Hidden = block.bstatus {
+            match block.btype {
+                BlockType::Mine => {
+                    // game over
+                    for y in 0..self.height {
+                        for x in 0..self.width {
+                            self.map[y][x].bstatus = BlockStatus::Shown;
+                        }
+                    }
+                    return ClickResult::Wasted;
+                },
+                BlockType::Tip(_) => {
+                    block.bstatus = BlockStatus::Shown;
+                    self.shown_count += 1;
+                },
+                BlockType::Space => {
+                    block.bstatus = BlockStatus::Shown;
+                    let surroundings = get_surroundings(x, y, &self.width, &self.height);
+                    self.shown_count += 1;
+                    for (cur_x, cur_y) in surroundings.iter() {
+                        self.click(cur_x, cur_y);
+                    }
+                }
+            }
+            if self.shown_count == self.safety_block_count {
+                return ClickResult::Win;
+            }
+        }
+        ClickResult::NothingHappened
+    }
+    pub fn right_click(&mut self, x: &usize, y: &usize) {
+        let mut block = &mut self.map[*y][*x];
+        if let BlockStatus::Shown = block.bstatus {
+            return;
+        }
+        match block.bstatus {
+            BlockStatus::Hidden => { block.bstatus = BlockStatus::Flaged; }
+            BlockStatus::Flaged => { block.bstatus = BlockStatus::QuestionMarked; }
+            BlockStatus::QuestionMarked => { block.bstatus = BlockStatus::Hidden; }
+            _ => {}
+        }
     }
 }
 

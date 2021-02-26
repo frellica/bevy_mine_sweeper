@@ -35,6 +35,7 @@ impl Plugin for GamePlugin {
             .add_startup_system(new_map.system())
             .add_system(handle_movement.system())
             .add_system(handle_click.system())
+            // .add_system(render_map.system())
             .add_stage_after(stage::UPDATE, STAGE, StateStage::<GameState>::default())
             .on_state_enter(STAGE, GameState::Ready, new_game.system());
     }
@@ -47,11 +48,15 @@ const Y_MARGIN: usize = 50;
 const SPRITE_SIZE: f32 = 48.0;
 const STAGE: &str = "game_state";
 
+struct MapData {
+    map_entity: Entity,
+}
+
 struct WindowOffset {
     x: f32,
     y: f32,
 }
-
+#[derive(Debug, Clone, Copy)]
 pub struct GameConfig {
     pub width: usize,
     pub height: usize,
@@ -105,6 +110,7 @@ fn setup(
     asset_server: Res<AssetServer>,
     button_materials: Res<ButtonMaterials>,
     windows: ResMut<Windows>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     let font = asset_server.load("fonts/pointfree.ttf");
     let window = windows.get_primary().unwrap();
@@ -195,6 +201,11 @@ fn setup(
                 ..Default::default()
             });
         });
+
+    let texture_handle = asset_server.load("textures/block.png");
+    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(SPRITE_SIZE, SPRITE_SIZE), 4, 1);
+    let texture_atlas_handle = texture_atlases.add(texture_atlas);
+    commands.insert_resource(texture_atlas_handle);
 }
 struct RenderBlock {
     pos: Position,
@@ -205,24 +216,23 @@ fn new_map(
 ) {
     commands
         .insert_resource(MinePlayground::init(&config.width, &config.height, &config.mine_count).unwrap());
+    commands.spawn((MinePlayground::init(&config.width, &config.height, &config.mine_count).unwrap(), ));
+    commands.insert_resource(MapData {
+        map_entity: commands.current_entity().unwrap(),
+    });
 }
 
 fn new_game(
     commands: &mut Commands,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    asset_server: Res<AssetServer>,
+    texture_atlases: Res<Assets<TextureAtlas>>,
+    atlas_handle: Res<Handle<TextureAtlas>>,
     mp: Res<MinePlayground>,
     window_offset: Res<WindowOffset>,
 ) {
-    let texture_handle = asset_server.load("textures/block.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(SPRITE_SIZE, SPRITE_SIZE), 4, 1);
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
     println!("111{:?}", mp.map);
     for row in mp.map.iter() {
         for block in row.iter() {
-            let texture_atlas = texture_atlases.get_handle(texture_atlas_handle.clone());
-            // println!("atlas:{:?}", texture_atlas);
-            
+            let texture_atlas = texture_atlases.get_handle(atlas_handle.clone());
             commands
                 .spawn(SpriteSheetBundle {
                     transform: Transform {
@@ -244,27 +254,41 @@ fn new_game(
 }
 fn handle_movement(
     mut cursor_pos: ResMut<CursorLocation>,
-    // mut state: ResMut<State>,
     cursor_moved_events: Res<Events<CursorMoved>>,
     mut evr_cursor: Local<EventReader<CursorMoved>>,
-
 ) {
     for ev in evr_cursor.iter(&cursor_moved_events) {
-        // println!("Cursor at: {:?}", ev.position);
         cursor_pos.0 = ev.position;
     }
 }
 
 fn handle_click(
-    mut block_query: Query<&mut SpriteSheetBundle, With<RenderBlock>>,
-    ev_cursor: Res<Events<CursorMoved>>,
-    mut evr_cursor: Local<EventReader<CursorMoved>>,
+    mut block_query: Query<(&RenderBlock, &mut SpriteSheetBundle)>,
     btns: Res<Input<MouseButton>>,
     cursor_pos: Res<CursorLocation>,
+    config: Res<GameConfig>,
+    mut mp: ResMut<MinePlayground>,
 
 ) {
     if btns.just_released(MouseButton::Left) {
-        println!("left btn clicked{:?}", cursor_pos);
+        if let Some((x, y)) = get_block_index_by_cursor_pos(cursor_pos.0, *config) {
+            println!("{:?}-{:?}", x, y);
+            let click_result = mp.click(&x, &y);
+            println!("{:?}", mp.map);
+            // let aaa = block_query.get_mut(x);
+            for (block, ssb) in block_query.iter_mut() {
+                println!("{:?}", block.pos);
+                // if block.pos.x == x && block.pos.y == y {
+                //     println!("{:?}", block.pos);
+                // }
+            }
+        }
+    }
+    if btns.just_released(MouseButton::Right) {
+        if let Some((x, y)) = get_block_index_by_cursor_pos(cursor_pos.0, *config) {
+            println!("{:?}-{:?}", x, y);
+            mp.right_click(&x, &y);
+        }
     }
 }
 
@@ -309,4 +333,13 @@ fn restart_button_system(
             }
         }
     }
+}
+
+fn get_block_index_by_cursor_pos(pos: Vec2, config: GameConfig) -> Option<(usize, usize)> {
+    let x = (pos.x / BLOCK_WIDTH as f32).floor() as usize;
+    let y = (pos.y / BLOCK_WIDTH as f32).floor() as usize;
+    if (0..config.height).contains(&y) && (0..config.width).contains(&x) {
+        return Some((x, y));
+    }
+    None
 }
