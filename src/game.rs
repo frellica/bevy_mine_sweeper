@@ -17,6 +17,7 @@ pub fn game_app(config: GameConfig) {
         })
         .add_resource(config)
         .add_plugins(DefaultPlugins)
+        .add_plugin(bevy_webgl2::WebGL2Plugin)
         .add_plugin(GamePlugin)
         .run();
 }
