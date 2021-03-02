@@ -174,8 +174,8 @@ fn setup(
         })
         .with(FpsRefresh);
     commands.insert_resource(WindowOffset {
-        x: window.physical_width() as f32 / 2.0 - BLOCK_WIDTH as f32 / 2.0,
-        y: window.physical_height() as f32 / 2.0 - BLOCK_WIDTH as f32 / 2.0,
+        x: window.width() as f32 / 2.0 - BLOCK_WIDTH as f32 / 2.0,
+        y: window.height() as f32 / 2.0 - BLOCK_WIDTH as f32 / 2.0,
     });
     commands
         .insert_resource(LastActionText(NEW_GAME_TEXT.to_string()))
@@ -185,7 +185,7 @@ fn setup(
                 position_type: PositionType::Absolute,
                 // center button
                 position: Rect {
-                    left: Val::Px((window.physical_width() as f32) / 2.0 - 50.0),
+                    left: Val::Px((window.width() as f32) / 2.0 - 50.0),
                     top: Val::Px(12.5),
                     ..Default::default()
                 },
