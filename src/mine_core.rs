@@ -175,6 +175,9 @@ impl MinePlayground {
         }
         for new_y in 0..self.height {
             for new_x in 0..self.width {
+                if new_x == *x && new_y == *y {
+                    return;
+                }
                 if self.map[new_y][new_x].btype != BlockType::Mine {
                     self.map[new_y][new_x].btype = BlockType::Mine;
                     let surroundings = get_surroundings(&new_x, &new_y, &self.width, &self.height);
